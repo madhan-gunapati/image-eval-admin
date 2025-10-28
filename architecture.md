@@ -162,16 +162,21 @@ Decision: Start with heuristics (assignment requirement) and design the agents s
 1. clone the Repo to Your local Machine
 2. Add `.env.local` with `DATABASE_URL` (Mongo string with DB name):
 
-   ```env
-   DATABASE_URL="mongodb+srv://<user>:<pw>@cluster.../imageEval?retryWrites=true&w=majority"
    ```
-   and jwt secret
+   DATABASE_URL="mongodb+srv://<name>:<Yourpassword>@cluster0.2rsibfh.mongodb.net/mavic?retryWrites=true&w=majority"
+JWT_SECRET="mavic_secret"
+   ```
+   
 3. Install and generate Prisma client:
 
    ```bash
    npm install
-   npx run db:generate
-   npm run db:push   # if script configured to preload env
+   npx run db:generate 
+   (faced some temp. problem reading env variable, so added a command in package.json file to generate and push
+    "db:generate": "dotenv -e .env -- npx prisma generate"
+    "db:push": "dotenv -e .env -- npx prisma db push"
+    )
+   npm run db:push   
    ```
 4. Seed DB:
 
@@ -183,7 +188,9 @@ Decision: Start with heuristics (assignment requirement) and design the agents s
    ```bash
    npm run dev
    ```
-6. Open Admin UI: `http://localhost:3000/signup` — signup as new user and login to go to admin page
+6. Open Admin UI: `http://localhost:3000/signup` — signup as new user 
+7. login after successful signup `http://localhost:3000/signup`
+8. you will be redirected to admin page `http://localhost:3000/admin`
 
 ---
 
