@@ -171,23 +171,12 @@ JWT_SECRET="mavic_secret
    
 3. Install and generate Prisma client:
 
-   
+
    npm install
-   
-   
-   
-   
-   (faced some temp. problem reading env variable, so added a command in package.json file to generate and push
 
-   
-    "db:generate": "dotenv -e .env -- npx prisma generate"
-    
-    "db:push": "dotenv -e .env -- npx prisma db push" )
-    
-    
-   npx run db:generate 
+   npm run db:generate (dotenv -e .env -- npx prisma generate)
 
-   npm run db:push  
+   npm run db:push  (dotenv -e .env -- npx prisma db push)
    
    
 4. Seed DB:
