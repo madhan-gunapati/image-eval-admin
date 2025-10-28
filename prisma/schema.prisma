@@ -1,0 +1,62 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+model Admin {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  name      String
+  email     String   @unique
+  password  String
+  createdAt DateTime @default(now())
+}
+
+model User {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String   @unique
+  userName  String
+  userRole  String
+  prompts   Prompt[]
+}
+
+model Brand {
+  id              String   @id @default(auto()) @map("_id") @db.ObjectId
+  brandId         String   @unique
+  brandName       String
+  brandDescription String
+  style           String
+  brandVision     String
+  brandVoice      String
+  colors          String
+  prompts         Prompt[]
+}
+
+model Prompt {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  imagePath   String
+  prompt      String
+  LLM_Model   String
+  channel     String
+  userId      String
+  brandId     String
+  timeStamp   DateTime
+  evaluation  String?
+  user        User?    @relation(fields: [userId], references: [userId])
+  brand       Brand?   @relation(fields: [brandId], references: [brandId])
+  evaluations Evaluation[]
+}
+
+model Evaluation {
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
+  promptId     String
+  sizeScore    Float?
+  subjectScore Float?
+  creativityScore Float?
+  moodScore    Float?
+  endScore     Float?
+  createdAt    DateTime @default(now())
+  prompt       Prompt   @relation(fields: [promptId], references: [id])
+}
