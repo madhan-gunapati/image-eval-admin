@@ -171,13 +171,21 @@ JWT_SECRET="mavic_secret"
 
    ```bash
    npm install
-   npx run db:generate 
-   (faced some temp. problem reading env variable, so added a command in package.json file to generate and push
-    "db:generate": "dotenv -e .env -- npx prisma generate"
-    "db:push": "dotenv -e .env -- npx prisma db push"
-    )
-   npm run db:push   
    ```
+   ```bash
+   npx run db:generate 
+   ```
+   (faced some temp. problem reading env variable, so added a command in package.json file to generate and push
+
+   
+    "db:generate": "dotenv -e .env -- npx prisma generate"
+    
+    "db:push": "dotenv -e .env -- npx prisma db push" )
+    
+    ```bash
+   npm run db:push  
+   ``` 
+   
 4. Seed DB:
 
    ```bash
