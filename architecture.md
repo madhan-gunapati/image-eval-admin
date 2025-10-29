@@ -160,13 +160,14 @@ Decision: Start with heuristics (assignment requirement) and design the agents s
 ## Local setup & run steps (summary)
 
 1. clone the Repo to Your local Machine
-2. Add `.env.local` with `DATABASE_URL` (Mongo string with DB name):
+2. Add `.env.local` with `DATABASE_URL` (Mongo string with DB name) ,`JWT_SECRET` , `GEMINI API KEY` :
 
    
    DATABASE_URL="mongodb+srv://<name>:<Yourpassword>@cluster0.2rsibfh.mongodb.net/mavic?retryWrites=true&w=majority"
    
    
-JWT_SECRET="mavic_secret
+JWT_SECRET="mavic_secret"
+GEMINI_API_SECRET
    
    
 3. Install and generate Prisma client:
