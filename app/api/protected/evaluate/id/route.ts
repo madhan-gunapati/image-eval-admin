@@ -3,10 +3,12 @@ import { PrismaClient } from "@prisma/client";
 import path from "path";
 import fs from "fs";
 import sharp from "sharp";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
 const prisma = new PrismaClient();
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 
-/* ---------- AGENT A: SIZE COMPLIANCE ---------- */
+/* ---------- AGENT A: SIZE COMPLIANCE (Heuristic) ---------- */
 async function agentA_checkSize(imagePath: string) {
   try {
     const fullPath = path.join(process.cwd(), "public", imagePath);
@@ -24,25 +26,138 @@ async function agentA_checkSize(imagePath: string) {
   }
 }
 
-/* ---------- AGENT B: SUBJECT ADHERENCE ---------- */
-function agentB_subjectAdherence(prompt: string, imagePath: string) {
-  const imageName = path.basename(imagePath).toLowerCase();
-  const promptWords = prompt.toLowerCase().split(/\s+/);
-  const matchCount = promptWords.filter((w) => imageName.includes(w)).length;
+/* ---------- GEMINI FUNCTION SCHEMAS ---------- */
+const functions = [
+  {
+    name: "evaluate_subject_adherence",
+    description:
+      "Evaluate how well the image name or description matches the prompt’s subject. Return an integer score 0–100.",
+    parameters: {
+      type: "object",
+      properties: {
+        prompt: { type: "string" },
+        imageName: { type: "string" },
+      },
+      required: ["prompt", "imageName"],
+    },
+  },
+  {
+    name: "evaluate_creativity_and_mood",
+    description:
+      "Analyze the prompt text and return creativityScore and moodScore (0–100).",
+    parameters: {
+      type: "object",
+      properties: {
+        prompt: { type: "string" },
+      },
+      required: ["prompt"],
+    },
+  },
+];
 
-  const adherence = Math.min(100, (matchCount / promptWords.length) * 200);
-  return { name: "subjectScore", score: Math.round(adherence) };
+/* ---------- AGENT B: SUBJECT ADHERENCE (Gemini function call) ---------- */
+async function agentB_subjectAdherence(prompt: string, imagePath: string) {
+  const imageName = path.basename(imagePath);
+  const model = genAI.getGenerativeModel({
+    model:  "gemini-2.0-flash" ,
+    tools: [{ functionDeclarations: [functions[0]] }],
+  });
+
+  const promptText = `
+Given a prompt and image file name, assess how well the image name matches the subject described.
+Return a numeric "subjectScore" (0–100) — 100 means perfect alignment.
+`;
+
+  const result = await model.generateContent({
+    contents: [
+      {
+        role: "user",
+        parts: [
+          { text: promptText },
+          {
+            functionCall: {
+              name: "evaluate_subject_adherence",
+              args: { prompt, imageName },
+            },
+          },
+        ],
+      },
+    ],
+  });
+
+  const call = result.response.functionCalls()?.[0];
+  let score = 0;
+  if (call?.args) {
+    const parsed = JSON.parse(JSON.stringify(call.args));
+    score =
+      parsed.subjectScore ||
+      parsed.score ||
+      parsed.value ||
+      Number(Object.values(parsed)[0]) ||
+      0;
+  } else {
+    // fallback textual extraction
+    const txt = result.response.text();
+    const match = txt.match(/\d+/);
+    score = match ? Number(match[0]) : 50;
+  }
+
+  return { name: "subjectScore", score };
 }
 
-/* ---------- AGENT C: CREATIVITY & MOOD ---------- */
-function agentC_creativityAndMood(prompt: string) {
-  const wordCount = prompt.split(/\s+/).length;
-  const creativityScore = Math.min(100, (wordCount / 15) * 100); // heuristic
-  const moodScore = 60 + Math.random() * 40; // pseudo-random mood
-  return {
-    creativityScore: Math.round(creativityScore),
-    moodScore: Math.round(moodScore),
-  };
+/* ---------- AGENT C: CREATIVITY & MOOD (Gemini function call) ---------- */
+async function agentC_creativityAndMood(prompt: string) {
+  const model = genAI.getGenerativeModel({
+    model: "gemini-2.0-flash" ,
+    tools: [{ functionDeclarations: [functions[1]] }],
+  });
+
+  const promptText = `
+Analyze this text prompt and rate its creativity and mood (0–100 each).
+Return JSON with two fields: "creativityScore" and "moodScore".
+`;
+
+  const result = await model.generateContent({
+    contents: [
+      {
+        role: "user",
+        parts: [
+          { text: promptText },
+          {
+            functionCall: {
+              name: "evaluate_creativity_and_mood",
+              args: { prompt },
+            },
+          },
+        ],
+      },
+    ],
+  });
+
+  const call = result.response.functionCalls()?.[0];
+  let creativityScore = 0,
+    moodScore = 0;
+  if (call?.args) {
+    const parsed = JSON.parse(JSON.stringify(call.args));
+    creativityScore =
+      parsed.creativityScore ||
+      Number(parsed.creativity) ||
+      Number(Object.values(parsed)[0]) ||
+      0;
+    moodScore =
+      parsed.moodScore ||
+      Number(parsed.mood) ||
+      Number(Object.values(parsed)[1]) ||
+      0;
+  } else {
+    // fallback text parse
+    const txt = result.response.text();
+    const nums = txt.match(/\d+/g);
+    creativityScore = nums?.[0] ? Number(nums[0]) : 60;
+    moodScore = nums?.[1] ? Number(nums[1]) : 60;
+  }
+
+  return { creativityScore, moodScore };
 }
 
 /* ---------- AGGREGATOR ---------- */
@@ -52,36 +167,36 @@ function aggregateScores(scores: {
   creativityScore: number;
   moodScore: number;
 }) {
-  const total = scores.sizeScore + scores.subjectScore + scores.creativityScore + scores.moodScore;
+  const total =
+    scores.sizeScore +
+    scores.subjectScore +
+    scores.creativityScore +
+    scores.moodScore;
   return Math.round(total / 4);
 }
 
 /* ---------- MAIN ROUTE ---------- */
-export async function POST(
-  req: Request
-) {
+export async function POST(req: Request) {
   try {
-    const {promptId} = await req.json()
-    console.log(promptId)
-    
-   
-    // Fetch prompt from DB
+    const { promptId } = await req.json();
+
     const prompt = await prisma.prompt.findUnique({
       where: { id: promptId },
     });
-    
     if (!prompt) {
-      
-      return NextResponse.json({ success: false, error: "Prompt not found" }, { status: 404 });
+      return NextResponse.json(
+        { success: false, error: "Prompt not found" },
+        { status: 404 },
+      );
     }
 
     const imagePath = prompt.imagePath;
     const promptText = prompt.prompt;
 
-    // Run multi-agent evaluation
     const sizeRes = await agentA_checkSize(imagePath);
-    const subjectRes = agentB_subjectAdherence(promptText, imagePath);
-    const { creativityScore, moodScore } = agentC_creativityAndMood(promptText);
+    const subjectRes = await agentB_subjectAdherence(promptText, imagePath);
+    const { creativityScore, moodScore } =
+      await agentC_creativityAndMood(promptText);
 
     const scores = {
       sizeScore: sizeRes.score,
@@ -92,7 +207,6 @@ export async function POST(
 
     const endScore = aggregateScores(scores);
 
-    // ✅ Persist evaluation in Evaluation table
     const evaluation = await prisma.evaluation.create({
       data: {
         promptId,
@@ -104,28 +218,23 @@ export async function POST(
       },
     });
 
-    // ✅ Update the Prompt table with evaluation result
     await prisma.prompt.update({
       where: { id: promptId },
-      data: {
-        evaluation: String(endScore),
-        
-      },
+      data: { evaluation: String(endScore) },
     });
-    
 
     return NextResponse.json({
       success: true,
       evaluation,
-      sizeScore:scores.sizeScore,
-      subjectScore:scores.subjectScore,
-      creativityScore:scores.creativityScore,
-      moodScore:scores.moodScore,
+      ...scores,
       endScore,
-      message: "Evaluation completed and prompt updated successfully.",
+      message: "Evaluation completed using Gemini function calls.",
     });
   } catch (err: any) {
     console.error("Evaluation error:", err);
-    return NextResponse.json({ success: false, error: err.message }, { status: 500 });
+    return NextResponse.json(
+      { success: false, error: err.message },
+      { status: 500 },
+    );
   }
 }
